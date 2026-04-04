@@ -4,89 +4,56 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 248 100% 99%;
+    --foreground: 240 15% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 15% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 240 15% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 258 90% 62%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 47 100% 92%;
+    --secondary-foreground: 36 80% 30%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 248 40% 95%;
+    --muted-foreground: 240 10% 50%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 168 85% 42%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 248 30% 90%;
+    --input: 248 30% 90%;
+    --ring: 258 90% 62%;
 
-    --radius: 0.5rem;
+    --radius: 0.875rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 15% 25%;
+    --sidebar-primary: 258 90% 62%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 248 60% 96%;
+    --sidebar-accent-foreground: 258 90% 52%;
+    --sidebar-border: 248 30% 90%;
+    --sidebar-ring: 258 90% 62%;
+
+    /* Brand colors */
+    --violet: 258 90% 62%;
+    --violet-light: 258 90% 95%;
+    --yellow: 47 100% 60%;
+    --yellow-light: 47 100% 92%;
+    --green: 168 85% 42%;
+    --green-light: 168 60% 92%;
+    --coral: 15 100% 65%;
+    --coral-light: 15 100% 94%;
+    --blue: 210 100% 60%;
+    --blue-light: 210 100% 94%;
   }
 }
 
@@ -96,6 +63,164 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-body;
+    font-feature-settings: "cv02", "cv03", "cv04";
   }
+}
+
+@layer components {
+  .notebook-card {
+    @apply bg-white rounded-2xl border border-border shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5;
+  }
+
+  .btn-primary {
+    @apply bg-primary text-primary-foreground font-semibold rounded-xl px-5 py-2.5 hover:bg-primary/90 transition-all duration-150 active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply text-foreground/70 font-medium rounded-xl px-4 py-2 hover:bg-muted hover:text-foreground transition-all duration-150;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sidebar-foreground font-medium transition-all duration-150 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground cursor-pointer;
+  }
+
+  .nav-item.active {
+    @apply bg-sidebar-accent text-sidebar-accent-foreground font-semibold;
+  }
+
+  .editor-toolbar-btn {
+    @apply w-8 h-8 flex items-center justify-center rounded-lg hover:bg-muted transition-colors duration-100 cursor-pointer text-foreground/70 hover:text-foreground;
+  }
+
+  .editor-toolbar-btn.active {
+    @apply bg-[hsl(var(--violet-light))] text-primary;
+  }
+
+  .tag-chip {
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+}
+
+/* Notebook lines effect */
+.notebook-lines {
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    hsl(248 30% 90%) 27px,
+    hsl(248 30% 90%) 28px
+  );
+  background-attachment: local;
+}
+
+/* Editor styles */
+.wysiwyg-content {
+  outline: none;
+  min-height: 400px;
+  line-height: 1.8;
+}
+
+.wysiwyg-content h1 {
+  @apply text-2xl font-bold mb-3 mt-5;
+}
+.wysiwyg-content h2 {
+  @apply text-xl font-bold mb-2 mt-4;
+}
+.wysiwyg-content h3 {
+  @apply text-lg font-semibold mb-2 mt-3;
+}
+.wysiwyg-content p {
+  @apply mb-3;
+}
+.wysiwyg-content ul {
+  @apply list-disc pl-6 mb-3;
+}
+.wysiwyg-content ol {
+  @apply list-decimal pl-6 mb-3;
+}
+.wysiwyg-content blockquote {
+  @apply border-l-4 border-primary/40 pl-4 italic text-muted-foreground my-3;
+}
+.wysiwyg-content strong {
+  @apply font-bold;
+}
+.wysiwyg-content em {
+  @apply italic;
+}
+.wysiwyg-content u {
+  @apply underline;
+}
+.wysiwyg-content img {
+  @apply rounded-lg max-w-full my-3;
+}
+.wysiwyg-content .formula {
+  @apply font-mono bg-muted px-1.5 py-0.5 rounded text-sm;
+}
+
+/* Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease both;
+}
+.animate-scale-in {
+  animation: scale-in 0.2s ease both;
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease both;
+}
+
+.hover-scale {
+  @apply transition-transform duration-150 hover:scale-105;
+}
+
+/* Stagger children */
+.stagger > *:nth-child(1) {
+  animation-delay: 0ms;
+}
+.stagger > *:nth-child(2) {
+  animation-delay: 60ms;
+}
+.stagger > *:nth-child(3) {
+  animation-delay: 120ms;
+}
+.stagger > *:nth-child(4) {
+  animation-delay: 180ms;
+}
+.stagger > *:nth-child(5) {
+  animation-delay: 240ms;
+}
+.stagger > *:nth-child(6) {
+  animation-delay: 300ms;
 }
