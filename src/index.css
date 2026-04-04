@@ -224,3 +224,51 @@
 .stagger > *:nth-child(6) {
   animation-delay: 300ms;
 }
+
+/* ─── Print / PDF styles ───────────────────────────────────────────────────── */
+@media print {
+  aside,
+  header,
+  footer,
+  button,
+  nav {
+    display: none !important;
+  }
+  .flex {
+    display: block !important;
+  }
+  .overflow-hidden {
+    overflow: visible !important;
+  }
+  .h-screen {
+    height: auto !important;
+  }
+  body {
+    background: white !important;
+  }
+  main,
+  .flex-1 {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .bg-background {
+    background: white !important;
+  }
+  .rounded-2xl,
+  .rounded-3xl {
+    border-radius: 8px !important;
+  }
+  .shadow-sm,
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+  .border {
+    border: 1px solid #e5e7eb !important;
+  }
+  .animate-fade-in {
+    animation: none !important;
+  }
+  @page {
+    margin: 1.5cm;
+  }
+}

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Notebook, NotebookBlock, SectionId } from "@/types/notebook";
 import { StudentAnswers } from "@/types/notebook";
 import Icon from "@/components/ui/icon";
+import { exportNotebookHTML } from "@/lib/exportHTML";
 
 interface Props {
   notebook: Notebook;
@@ -18,6 +19,17 @@ const SECTION_ICONS: Record<SectionId, string> = {
   "homework":       "House",
   "results":        "BarChart3",
 };
+
+// ─── Тип «задание» для навигации ─────────────────────────────────────────────
+
+interface TaskItem {
+  blockId:   string;
+  sectionId: SectionId;
+  label:     string;     // «Задание 1», «Задание 2» …
+  type:      NotebookBlock["type"];
+  checked:   boolean;
+  answered:  boolean;
+}
 
 // ─── Block renderer (student view) ──────────────────────────────────────────
 
@@ -86,7 +98,7 @@ function BlockView({
           })}
         </div>
         {isChecked && block.explanation && (
-          <div className="bg-brand-green-lt rounded-xl p-3 text-sm text-green-800">
+          <div className="bg-green-50 rounded-xl p-3 text-sm text-green-800 mb-3">
             💡 {block.explanation}
           </div>
         )}
@@ -96,12 +108,19 @@ function BlockView({
             Проверить
           </button>
         )}
+        {isChecked && (
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ${selected === block.correct ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+            <Icon name={selected === block.correct ? "CheckCircle2" : "XCircle"} size={13} />
+            {selected === block.correct ? "Верно!" : "Неверно"}
+          </div>
+        )}
       </div>
     );
   }
 
   if (block.type === "quiz-multi") {
     const selected: number[] = Array.isArray(ans) ? (ans as number[]) : [];
+    const allCorrect = isChecked && JSON.stringify([...selected].sort()) === JSON.stringify([...block.correct].sort());
     return (
       <div className="bg-white rounded-2xl border border-border p-6">
         <p className="font-heading font-semibold text-base mb-1">{block.question}</p>
@@ -126,11 +145,16 @@ function BlockView({
             );
           })}
         </div>
-        {!isChecked && (
+        {!isChecked ? (
           <button onClick={() => onCheck(block.id)} disabled={selected.length === 0}
             className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-primary/90 transition-colors">
             Проверить
           </button>
+        ) : (
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ${allCorrect ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+            <Icon name={allCorrect ? "CheckCircle2" : "XCircle"} size={13} />
+            {allCorrect ? "Верно!" : `Неверно. Правильно: ${block.correct.map(i => block.options[i]).join(", ")}`}
+          </div>
         )}
       </div>
     );
@@ -138,7 +162,7 @@ function BlockView({
 
   if (block.type === "quiz-match") {
     const userPairs = (ans && typeof ans === "object") ? (ans as Record<string, string>) : {};
-    const shuffled  = [...block.pairs.map((p) => p.right)].sort(() => Math.random() - 0.5);
+    const rights = block.pairs.map((p) => p.right);
     return (
       <div className="bg-white rounded-2xl border border-border p-6">
         <p className="font-heading font-semibold text-base mb-4">{block.question}</p>
@@ -149,26 +173,33 @@ function BlockView({
             const isWrong = isChecked && val !== pair.right;
             return (
               <div key={pair.left} className="flex items-center gap-3">
-                <span className="text-sm font-medium w-1/3">{pair.left}</span>
+                <span className="text-sm font-medium w-1/3 bg-muted rounded-lg px-3 py-2">{pair.left}</span>
                 <Icon name="ArrowRight" size={14} className="text-muted-foreground shrink-0" />
                 <select value={val} disabled={isChecked}
                   onChange={(e) => onAnswer(block.id, { ...userPairs, [pair.left]: e.target.value })}
-                  className={`flex-1 border-2 rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors ${
+                  className={`flex-1 border-2 rounded-xl px-3 py-2 text-sm focus:outline-none transition-colors appearance-none ${
                     isRight ? "border-green-400 bg-green-50" : isWrong ? "border-red-400 bg-red-50" : "border-border"
                   }`}>
                   <option value="">— выберите —</option>
-                  {shuffled.map((r) => <option key={r}>{r}</option>)}
+                  {rights.map((r) => <option key={r}>{r}</option>)}
                 </select>
+                {isRight && <Icon name="Check" size={14} className="text-green-600 shrink-0" />}
+                {isWrong && <Icon name="X" size={14} className="text-red-500 shrink-0" />}
               </div>
             );
           })}
         </div>
-        {!isChecked && (
+        {!isChecked ? (
           <button onClick={() => onCheck(block.id)}
             disabled={Object.keys(userPairs).length < block.pairs.length}
             className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-primary/90 transition-colors">
             Проверить
           </button>
+        ) : (
+          <div className="text-xs text-muted-foreground mt-2 bg-muted rounded-xl p-3">
+            <p className="font-semibold mb-1">Правильные ответы:</p>
+            {block.pairs.map(p => <p key={p.left}>{p.left} → {p.right}</p>)}
+          </div>
         )}
       </div>
     );
@@ -183,16 +214,21 @@ function BlockView({
         <p className="font-heading font-semibold text-base mb-3">{block.question}</p>
         <input value={val} disabled={isChecked}
           onChange={(e) => onAnswer(block.id, e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && !isChecked && val.trim() && onCheck(block.id)}
           placeholder="Введите ответ..."
           className={`w-full border-2 rounded-xl px-4 py-2.5 text-sm mb-3 focus:outline-none transition-colors ${
             isRight ? "border-green-400 bg-green-50" : isWrong ? "border-red-400 bg-red-50" : "border-border focus:border-primary"
           }`} />
-        {isWrong && <p className="text-xs text-green-700 mb-3">Правильный ответ: <strong>{block.correctAnswer}</strong></p>}
-        {!isChecked && (
+        {!isChecked ? (
           <button onClick={() => onCheck(block.id)} disabled={!val.trim()}
             className="px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold disabled:opacity-40 hover:bg-primary/90 transition-colors">
             Проверить
           </button>
+        ) : (
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold ${isRight ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+            <Icon name={isRight ? "CheckCircle2" : "XCircle"} size={13} />
+            {isRight ? "Верно!" : `Правильный ответ: ${block.correctAnswer}`}
+          </div>
         )}
       </div>
     );
@@ -218,14 +254,14 @@ function BlockView({
   }
 
   if (block.type === "task") {
-    const levelColors: Record<string, string> = { easy: "bg-brand-green-lt text-brand-green", medium: "bg-brand-yellow-lt text-yellow-700", hard: "bg-brand-coral-lt text-brand-coral" };
+    const levelColors: Record<string, string> = { easy: "bg-green-100 text-green-700", medium: "bg-yellow-100 text-yellow-700", hard: "bg-red-100 text-red-700" };
     const levelLabels: Record<string, string> = { easy: "Лёгкое", medium: "Среднее", hard: "Сложное" };
     const val = typeof ans === "string" ? ans : "";
     return (
       <div className="bg-white rounded-2xl border border-border p-6">
         <div className="flex items-center gap-2 mb-2">
           <h3 className="font-heading font-bold text-base">{block.title}</h3>
-          <span className={`tag-chip text-xs ${levelColors[block.level]}`}>{levelLabels[block.level]}</span>
+          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${levelColors[block.level]}`}>{levelLabels[block.level]}</span>
         </div>
         <p className="text-sm text-foreground mb-4">{block.description}</p>
         {block.allowText && (
@@ -234,7 +270,7 @@ function BlockView({
             className="w-full border-2 border-border rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary resize-none" />
         )}
         {block.allowFile && (
-          <div className="mt-3 border-2 border-dashed border-border rounded-xl p-4 text-center text-sm text-muted-foreground">
+          <div className="mt-3 border-2 border-dashed border-border rounded-xl p-4 text-center text-sm text-muted-foreground cursor-pointer hover:border-primary/40 transition-colors">
             <Icon name="Upload" size={18} className="mx-auto mb-1" />
             Прикрепите файл с решением
           </div>
@@ -264,7 +300,7 @@ function BlockView({
           ))}
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">
-              Самооценка: {typeof stored["rating"] === "number" ? stored["rating"] : "—"} / {block.selfRatingMax}
+              Самооценка: <span className="text-primary font-bold">{typeof stored["rating"] === "number" ? stored["rating"] : "—"}</span> / {block.selfRatingMax}
             </label>
             <div className="flex gap-1">
               {Array.from({ length: block.selfRatingMax }, (_, i) => i + 1).map((n) => (
@@ -306,7 +342,7 @@ function BlockView({
           ))}
         </div>
         {block.allowFile && (
-          <div className="border-2 border-dashed border-border rounded-xl p-4 text-center text-sm text-muted-foreground">
+          <div className="border-2 border-dashed border-border rounded-xl p-4 text-center text-sm text-muted-foreground cursor-pointer hover:border-primary/40 transition-colors">
             <Icon name="Upload" size={18} className="mx-auto mb-1" />
             Прикрепите выполненное задание
           </div>
@@ -396,11 +432,9 @@ function ResultsView({ notebook, answers, checked }: { notebook: Notebook; answe
       <div className="bg-white rounded-3xl border border-border p-8 text-center">
         <p className="text-5xl mb-3">{grade === 5 ? "🏆" : grade === 4 ? "⭐" : grade === 3 ? "📖" : "💪"}</p>
         <p className={`font-heading font-extrabold text-7xl mb-2 ${gradeColors[grade]}`}>{grade}</p>
-        <p className="text-muted-foreground text-sm">
-          Баллов: {earnedPoints} из {totalPoints} · {pct}%
-        </p>
+        <p className="text-muted-foreground text-sm">Баллов: {earnedPoints} из {totalPoints} · {pct}%</p>
         <div className="h-3 bg-muted rounded-full mt-4 overflow-hidden">
-          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+          <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${pct}%` }} />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-3">
@@ -423,119 +457,301 @@ function ResultsView({ notebook, answers, checked }: { notebook: Notebook; answe
 
 // ─── Main StudentView ─────────────────────────────────────────────────────────
 
+const QUIZ_TYPES: NotebookBlock["type"][] = ["quiz-radio", "quiz-multi", "quiz-match", "quiz-text"];
+
 export default function StudentView({ notebook, onBack }: Props) {
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("cover");
   const [answers,  setAnswers]  = useState<StudentAnswers>({});
   const [checked,  setChecked]  = useState<Record<string, boolean>>({});
+  const [taskNav,  setTaskNav]  = useState(false); // режим навигации по заданиям
+  const [taskIdx,  setTaskIdx]  = useState(0);
+  const [exportMenu, setExportMenu] = useState(false);
 
   const visibleSections = notebook.sections.filter(
     (s) => s.id === "cover" || s.id === "contents" || s.id === "results" || s.blocks.length > 0
   );
-
   const activeSection = notebook.sections.find((s) => s.id === activeSectionId)!;
   const activeIdx = visibleSections.findIndex((s) => s.id === activeSectionId);
 
+  // Собираем все интерактивные задания из тетради
+  const allTasks: TaskItem[] = [];
+  let taskCounter = 0;
+  notebook.sections.forEach((s) => {
+    s.blocks.forEach((b) => {
+      if (QUIZ_TYPES.includes(b.type) || b.type === "task") {
+        taskCounter++;
+        let label = `Задание ${taskCounter}`;
+        if (b.type === "quiz-radio" || b.type === "quiz-multi" || b.type === "quiz-match" || b.type === "quiz-text") {
+          label = `Вопрос ${taskCounter}`;
+        }
+        allTasks.push({
+          blockId:  b.id,
+          sectionId: s.id,
+          label,
+          type:     b.type,
+          checked:  !!checked[b.id],
+          answered: answers[b.id] !== undefined,
+        });
+      }
+    });
+  });
+
+  const currentTask = allTasks[taskIdx];
+
   const onAnswer = (id: string, val: unknown) => setAnswers((prev) => ({ ...prev, [id]: val }));
   const onCheck  = (id: string) => setChecked((prev) => ({ ...prev, [id]: true }));
+
+  const goToTask = (idx: number) => {
+    const task = allTasks[idx];
+    if (task) {
+      setTaskIdx(idx);
+      setActiveSectionId(task.sectionId);
+      setTaskNav(true);
+    }
+  };
+
+  const handleExportPDF = () => {
+    setExportMenu(false);
+    window.print();
+  };
+
+  const handleExportHTML = () => {
+    setExportMenu(false);
+    const html = exportNotebookHTML(notebook);
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `${notebook.cover.subject}_${notebook.cover.grade}кл_${notebook.cover.topic}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Блок для режима задания
+  const taskBlock = currentTask
+    ? notebook.sections.flatMap((s) => s.blocks).find((b) => b.id === currentTask.blockId)
+    : null;
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-border flex flex-col shrink-0">
-        <div className="px-3 py-4 border-b border-border">
-          <button onClick={onBack} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <Icon name="ChevronLeft" size={16} /> Назад
+        <div className="px-3 py-3 border-b border-border flex items-center gap-2">
+          <button onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+            <Icon name="ChevronLeft" size={14} /> Назад
           </button>
-        </div>
-
-        {/* Cover */}
-        <div className="px-3 py-3 border-b border-border">
-          <div className="w-full rounded-xl p-3 text-white text-center" style={{ background: notebook.cover.color }}>
-            <p className="font-heading font-extrabold text-sm">{notebook.cover.subject}</p>
-            <p className="text-[10px] opacity-80">{notebook.cover.grade} класс · {notebook.cover.topic}</p>
+          <div className="ml-auto relative">
+            <button
+              onClick={() => setExportMenu(!exportMenu)}
+              className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            >
+              <Icon name="Download" size={13} /> Сохранить
+            </button>
+            {exportMenu && (
+              <div className="absolute right-0 top-7 bg-white border border-border rounded-2xl shadow-xl z-50 py-1.5 w-44 animate-scale-in">
+                <button onClick={handleExportPDF}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors">
+                  <Icon name="FileText" size={14} className="text-red-500" /> PDF
+                </button>
+                <button onClick={handleExportHTML}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm hover:bg-muted transition-colors">
+                  <Icon name="Code" size={14} className="text-blue-500" /> HTML-файл
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        <nav className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">
-          {visibleSections.map((s) => (
-            <button key={s.id} onClick={() => setActiveSectionId(s.id)}
-              className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-left transition-all ${
-                activeSectionId === s.id ? "bg-brand-violet-lt text-primary font-semibold" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}>
-              <Icon name={SECTION_ICONS[s.id]} fallback="Circle" size={15} className={activeSectionId === s.id ? "text-primary" : ""} />
-              <span className="text-xs flex-1 leading-snug">{s.title}</span>
+        {/* Cover mini */}
+        <div className="px-3 py-3 border-b border-border">
+          <div className="w-full rounded-xl p-2.5 text-white text-center" style={{ background: notebook.cover.color }}>
+            <p className="font-heading font-extrabold text-xs">{notebook.cover.subject}</p>
+            <p className="text-[10px] opacity-80 leading-snug">{notebook.cover.grade} кл. · {notebook.cover.topic}</p>
+          </div>
+        </div>
+
+        {/* Mode toggle */}
+        <div className="px-3 pt-3 pb-1">
+          <div className="flex bg-muted rounded-xl p-0.5 text-xs">
+            <button onClick={() => setTaskNav(false)}
+              className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${!taskNav ? "bg-white shadow-sm text-foreground" : "text-muted-foreground"}`}>
+              Разделы
             </button>
-          ))}
+            <button onClick={() => { setTaskNav(true); setTaskIdx(0); }}
+              className={`flex-1 py-1.5 rounded-lg font-semibold transition-all ${taskNav ? "bg-white shadow-sm text-foreground" : "text-muted-foreground"}`}>
+              Задания
+            </button>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">
+          {!taskNav ? (
+            // Раздельный вид
+            visibleSections.map((s) => (
+              <button key={s.id} onClick={() => setActiveSectionId(s.id)}
+                className={`flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-left transition-all ${
+                  activeSectionId === s.id ? "bg-brand-violet-lt text-primary font-semibold" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}>
+                <Icon name={SECTION_ICONS[s.id]} fallback="Circle" size={15} className={activeSectionId === s.id ? "text-primary" : ""} />
+                <span className="text-xs flex-1 leading-snug">{s.title}</span>
+              </button>
+            ))
+          ) : (
+            // Режим заданий — все вопросы пронумерованы
+            allTasks.length === 0 ? (
+              <p className="text-xs text-muted-foreground px-3 py-4 text-center">В тетради нет<br/>интерактивных заданий</p>
+            ) : (
+              allTasks.map((t, i) => (
+                <button key={t.blockId} onClick={() => goToTask(i)}
+                  className={`flex items-center gap-2 w-full px-3 py-2 rounded-xl text-left transition-all ${
+                    taskNav && taskIdx === i ? "bg-brand-violet-lt text-primary font-semibold" : "text-muted-foreground hover:bg-muted"
+                  }`}>
+                  <span className={`w-6 h-6 rounded-lg text-[10px] font-extrabold flex items-center justify-center shrink-0 ${
+                    t.checked ? "bg-green-100 text-green-700" : t.answered ? "bg-yellow-100 text-yellow-700" : "bg-muted text-muted-foreground"
+                  }`}>
+                    {i + 1}
+                  </span>
+                  <span className="text-xs flex-1 leading-snug truncate">{t.label}</span>
+                  {t.checked && <Icon name="CheckCircle2" size={11} className="text-green-500 shrink-0" />}
+                </button>
+              ))
+            )
+          )}
         </nav>
+
+        {/* Task progress */}
+        {taskNav && allTasks.length > 0 && (
+          <div className="px-3 py-3 border-t border-border">
+            <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+              <span>Проверено</span>
+              <span>{allTasks.filter(t => t.checked).length} / {allTasks.length}</span>
+            </div>
+            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${(allTasks.filter(t => t.checked).length / allTasks.length) * 100}%` }} />
+            </div>
+          </div>
+        )}
       </aside>
 
-      {/* Content */}
+      {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
         <div className="bg-white border-b border-border px-6 py-3 flex items-center gap-3 shrink-0">
-          <h2 className="font-heading font-bold text-base">{activeSection.title}</h2>
-          <div className="ml-auto flex items-center gap-2">
-            <button disabled={activeIdx === 0}
-              onClick={() => setActiveSectionId(visibleSections[activeIdx - 1].id)}
-              className="px-3 py-1.5 rounded-xl border border-border text-xs font-semibold disabled:opacity-40 hover:bg-muted">
-              ← Назад
-            </button>
-            <button disabled={activeIdx === visibleSections.length - 1}
-              onClick={() => setActiveSectionId(visibleSections[activeIdx + 1].id)}
-              className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold disabled:opacity-40 hover:bg-primary/90">
-              Вперёд →
-            </button>
-          </div>
+          {taskNav ? (
+            <>
+              <h2 className="font-heading font-bold text-base">
+                {currentTask?.label ?? "Задания"}
+              </h2>
+              <span className="text-xs text-muted-foreground">
+                {taskIdx + 1} из {allTasks.length}
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                <button disabled={taskIdx === 0}
+                  onClick={() => goToTask(taskIdx - 1)}
+                  className="px-3 py-1.5 rounded-xl border border-border text-xs font-semibold disabled:opacity-40 hover:bg-muted">
+                  ← Назад
+                </button>
+                {/* Jump to any task */}
+                <div className="flex gap-1 flex-wrap max-w-xs">
+                  {allTasks.map((t, i) => (
+                    <button key={t.blockId} onClick={() => goToTask(i)}
+                      title={t.label}
+                      className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-all ${
+                        i === taskIdx ? "bg-primary text-white" :
+                        t.checked ? "bg-green-100 text-green-700" :
+                        t.answered ? "bg-yellow-100 text-yellow-700" :
+                        "bg-muted text-muted-foreground hover:bg-primary/10"
+                      }`}>
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => { if (taskIdx < allTasks.length - 1) { goToTask(taskIdx + 1); } else { setActiveSectionId("results"); setTaskNav(false); } }}
+                  className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold hover:bg-primary/90">
+                  {taskIdx === allTasks.length - 1 ? "Итоги →" : "Вперёд →"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="font-heading font-bold text-base">{activeSection.title}</h2>
+              <div className="ml-auto flex items-center gap-2">
+                <button disabled={activeIdx === 0}
+                  onClick={() => setActiveSectionId(visibleSections[activeIdx - 1].id)}
+                  className="px-3 py-1.5 rounded-xl border border-border text-xs font-semibold disabled:opacity-40 hover:bg-muted">
+                  ← Назад
+                </button>
+                <button disabled={activeIdx === visibleSections.length - 1}
+                  onClick={() => setActiveSectionId(visibleSections[activeIdx + 1].id)}
+                  className="px-3 py-1.5 rounded-xl bg-primary text-white text-xs font-semibold disabled:opacity-40 hover:bg-primary/90">
+                  Вперёд →
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
+        {/* Content */}
         <div className="flex-1 overflow-y-auto bg-background">
-          <div className="max-w-3xl mx-auto py-8 px-4 space-y-4 animate-fade-in" key={activeSectionId}>
-            {/* Cover */}
-            {activeSectionId === "cover" && (
-              <div className="rounded-3xl p-10 text-white text-center shadow-lg" style={{ background: `linear-gradient(135deg, ${notebook.cover.color}dd, ${notebook.cover.color})` }}>
-                <p className="text-white/70 text-xs uppercase tracking-widest mb-2">Электронная тетрадь</p>
-                <h1 className="font-heading font-extrabold text-5xl mb-2">{notebook.cover.subject}</h1>
-                <p className="font-heading font-bold text-2xl mb-4">{notebook.cover.grade} класс</p>
-                <div className="bg-white/20 backdrop-blur rounded-2xl px-6 py-3 inline-block mb-4">
-                  <p className="font-semibold">{notebook.cover.topic}</p>
-                </div>
-                <div className="flex items-center justify-center gap-6 text-sm text-white/70">
-                  <span>{notebook.cover.authorName}</span>
-                  <span>·</span>
-                  <span>{notebook.cover.schoolYear}</span>
-                </div>
-              </div>
+          <div className="max-w-3xl mx-auto py-8 px-4 space-y-4 animate-fade-in" key={taskNav ? `task-${taskIdx}` : activeSectionId}>
+            {taskNav ? (
+              // Показываем одно задание
+              taskBlock ? (
+                <BlockView block={taskBlock} answers={answers} checked={checked} onAnswer={onAnswer} onCheck={onCheck} />
+              ) : (
+                <div className="text-center py-20 text-muted-foreground">Задание не найдено</div>
+              )
+            ) : (
+              // Полный вид раздела
+              <>
+                {activeSectionId === "cover" && (
+                  <div className="rounded-3xl p-10 text-white text-center shadow-lg" style={{ background: `linear-gradient(135deg, ${notebook.cover.color}dd, ${notebook.cover.color})` }}>
+                    <p className="text-white/70 text-xs uppercase tracking-widest mb-2">Электронная тетрадь</p>
+                    <h1 className="font-heading font-extrabold text-5xl mb-2">{notebook.cover.subject}</h1>
+                    <p className="font-heading font-bold text-2xl mb-4">{notebook.cover.grade} класс</p>
+                    <div className="bg-white/20 backdrop-blur rounded-2xl px-6 py-3 inline-block mb-4">
+                      <p className="font-semibold">{notebook.cover.topic}</p>
+                    </div>
+                    <div className="flex items-center justify-center gap-6 text-sm text-white/70">
+                      <span>{notebook.cover.authorName}</span>
+                      <span>·</span>
+                      <span>{notebook.cover.schoolYear}</span>
+                    </div>
+                  </div>
+                )}
+                {activeSectionId === "contents" && (
+                  <div className="bg-white rounded-2xl border border-border p-6">
+                    <h3 className="font-heading font-bold text-lg mb-4">Содержание</h3>
+                    {visibleSections.filter((s) => s.id !== "cover" && s.id !== "contents").map((s, i) => (
+                      <button key={s.id} onClick={() => setActiveSectionId(s.id)}
+                        className="w-full flex items-center gap-3 py-3 border-b border-border/50 hover:bg-muted/30 rounded-lg px-2 transition-colors">
+                        <span className="text-sm text-muted-foreground w-6">{i + 1}.</span>
+                        <Icon name={SECTION_ICONS[s.id]} fallback="Circle" size={14} style={{ color: s.color }} />
+                        <span className="flex-1 text-sm font-medium text-left">{s.title}</span>
+                        <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {activeSectionId === "results" && (
+                  <ResultsView notebook={notebook} answers={answers} checked={checked} />
+                )}
+                {activeSectionId !== "cover" && activeSectionId !== "contents" && activeSectionId !== "results" &&
+                  activeSection.blocks.map((block) => (
+                    <BlockView key={block.id} block={block} answers={answers} checked={checked} onAnswer={onAnswer} onCheck={onCheck} />
+                  ))
+                }
+              </>
             )}
-
-            {/* Contents */}
-            {activeSectionId === "contents" && (
-              <div className="bg-white rounded-2xl border border-border p-6">
-                <h3 className="font-heading font-bold text-lg mb-4">Содержание</h3>
-                {visibleSections.filter((s) => s.id !== "cover" && s.id !== "contents").map((s, i) => (
-                  <button key={s.id} onClick={() => setActiveSectionId(s.id)}
-                    className="w-full flex items-center gap-3 py-3 border-b border-border/50 hover:bg-muted/30 rounded-lg px-2 transition-colors">
-                    <span className="text-sm text-muted-foreground w-6">{i + 1}.</span>
-                    <Icon name={SECTION_ICONS[s.id]} fallback="Circle" size={14} style={{ color: s.color }} />
-                    <span className="flex-1 text-sm font-medium text-left">{s.title}</span>
-                    <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Results */}
-            {activeSectionId === "results" && (
-              <ResultsView notebook={notebook} answers={answers} checked={checked} />
-            )}
-
-            {/* Regular sections */}
-            {activeSectionId !== "cover" && activeSectionId !== "contents" && activeSectionId !== "results" &&
-              activeSection.blocks.map((block) => (
-                <BlockView key={block.id} block={block} answers={answers} checked={checked} onAnswer={onAnswer} onCheck={onCheck} />
-              ))
-            }
           </div>
         </div>
       </div>
+
+      {/* Click outside to close export menu */}
+      {exportMenu && <div className="fixed inset-0 z-40" onClick={() => setExportMenu(false)} />}
     </div>
   );
 }
