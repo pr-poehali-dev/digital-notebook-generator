@@ -11,6 +11,7 @@ interface Props {
   onChange:  (nb: Notebook) => void;
   onBack:    () => void;
   onPreview: () => void;
+  onResults?: () => void;
 }
 
 const SECTION_ICONS: Record<SectionId, string> = {
@@ -24,7 +25,7 @@ const SECTION_ICONS: Record<SectionId, string> = {
   "results":        "BarChart3",
 };
 
-export default function NotebookEditor({ notebook, onChange, onBack, onPreview }: Props) {
+export default function NotebookEditor({ notebook, onChange, onBack, onPreview, onResults }: Props) {
   const [activeSection, setActiveSection] = useState<SectionId>("cover");
   const [saved, setSaved] = useState(false);
 
@@ -167,6 +168,15 @@ export default function NotebookEditor({ notebook, onChange, onBack, onPreview }
               <Icon name="Play" size={14} />
               Предпросмотр
             </button>
+            {onResults && (
+              <button
+                onClick={onResults}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold border border-border hover:bg-muted transition-colors"
+              >
+                <Icon name="BarChart3" size={14} />
+                Результаты
+              </button>
+            )}
           </div>
         </div>
 

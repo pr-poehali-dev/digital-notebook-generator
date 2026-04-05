@@ -18,7 +18,7 @@ function renderBlock(block: NotebookBlock): string {
   }
   if (block.type === "quiz-radio") {
     const opts = block.options.map((o, i) => `
-      <label class="option${i === block.correct ? " correct" : ""}">
+      <label class="option" data-idx="${i}">
         <input type="radio" name="q${block.id}" value="${i}"> ${o}
       </label>`).join("");
     return `
@@ -136,7 +136,8 @@ export function exportNotebookHTML(notebook: Notebook): string {
   .options { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
   .option { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-radius: 12px; border: 2px solid #e5e7eb; cursor: pointer; transition: all .15s; font-size: .9em; }
   .option:hover { border-color: var(--accent); background: #f5f0ff; }
-  .option.correct { border-color: #16a34a; background: #f0fdf4; }
+  .option.correct-shown { border-color: #16a34a; background: #f0fdf4; }
+  .option.wrong-shown { border-color: #dc2626; background: #fef2f2; }
   input[type="text"] { width: 100%; border: 2px solid #e5e7eb; border-radius: 12px; padding: 10px 16px; font-size: .9em; margin-bottom: 12px; outline: none; }
   input[type="text"]:focus { border-color: var(--accent); }
   textarea { width: 100%; border: 2px solid #e5e7eb; border-radius: 12px; padding: 10px 16px; font-size: .9em; resize: vertical; font-family: inherit; outline: none; }
@@ -165,9 +166,13 @@ export function exportNotebookHTML(notebook: Notebook): string {
   .star.active { background: var(--accent); color: white; }
   @media print {
     nav { display: none !important; }
-    body { background: white; }
-    .block { break-inside: avoid; }
-    button { display: none; }
+    body { background: white !important; }
+    .block { break-inside: avoid; box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+    button { display: none !important; }
+    .feedback { display: none !important; }
+    .cover { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .section-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    @page { margin: 1.5cm; size: A4; }
   }
 </style>
 </head>
@@ -199,11 +204,21 @@ function checkRadio(btn, id, correct) {
   var fb = document.getElementById('fb-'+id);
   var ex = document.getElementById('ex-'+id);
   if (!sel) return;
-  var ok = parseInt(sel.value) === correct;
+  var chosen = parseInt(sel.value);
+  var ok = chosen === correct;
   fb.className = 'feedback ' + (ok ? 'ok' : 'err');
-  fb.textContent = ok ? '✓ Верно!' : '✗ Неверно. Попробуй ещё раз.';
-  if (ok && ex) ex.style.display = 'block';
+  fb.textContent = ok ? '✓ Верно!' : '✗ Неверно.';
+  if (ex) ex.style.display = 'block';
   document.querySelectorAll('input[name="q'+id+'"]').forEach(function(r){r.disabled=true;});
+  // подсвечиваем только после проверки
+  document.querySelectorAll('.option[data-idx]').forEach(function(el) {
+    var idx = parseInt(el.getAttribute('data-idx'));
+    var inp = el.querySelector('input');
+    if (inp && inp.name === 'q'+id) {
+      if (idx === correct) el.classList.add('correct-shown');
+      if (idx === chosen && !ok) el.classList.add('wrong-shown');
+    }
+  });
   btn.disabled = true;
 }
 function checkText(id, correct, cs) {

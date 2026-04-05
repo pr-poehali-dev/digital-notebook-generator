@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Notebook } from "@/types/notebook";
 import { createDemoNotebook } from "@/data/defaultNotebook";
 import Icon from "@/components/ui/icon";
+import { useAuth } from "@/context/AuthContext";
 
 interface Props {
   notebooks: Notebook[];
@@ -24,6 +25,7 @@ function gradientFor(color: string) {
 }
 
 export default function DashboardPage({ notebooks, onOpen, onCreate, onDelete }: Props) {
+  const { user, logout } = useAuth();
   const [search, setSearch] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -57,7 +59,22 @@ export default function DashboardPage({ notebooks, onOpen, onCreate, onDelete }:
             />
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-3">
+            {user && (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+                  {user.name.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="hidden sm:block">
+                  <p className="text-xs font-semibold leading-none">{user.name}</p>
+                  <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{user.role === "teacher" ? "Учитель" : "Ученик"}</p>
+                </div>
+                <button onClick={logout} title="Выйти"
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+                  <Icon name="LogOut" size={15} />
+                </button>
+              </div>
+            )}
             <button
               onClick={onCreate}
               className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl font-semibold text-sm hover:bg-primary/90 transition-all active:scale-95"

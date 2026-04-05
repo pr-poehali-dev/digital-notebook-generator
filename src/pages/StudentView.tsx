@@ -3,6 +3,8 @@ import { Notebook, NotebookBlock, SectionId } from "@/types/notebook";
 import { StudentAnswers } from "@/types/notebook";
 import Icon from "@/components/ui/icon";
 import { exportNotebookHTML } from "@/lib/exportHTML";
+import { apiSaveResult } from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 
 interface Props {
   notebook: Notebook;
@@ -397,7 +399,16 @@ function TimerBlock({ label, seconds: initial }: { label: string; seconds: numbe
 
 // ─── Results ─────────────────────────────────────────────────────────────────
 
-function ResultsView({ notebook, answers, checked }: { notebook: Notebook; answers: StudentAnswers; checked: Record<string, boolean> }) {
+function ResultsView({ notebook, answers, checked, studentName, studentClass }: {
+  notebook: Notebook;
+  answers: StudentAnswers;
+  checked: Record<string, boolean>;
+  studentName: string;
+  studentClass: string;
+}) {
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   let totalPoints = 0;
   let earnedPoints = 0;
 
@@ -427,6 +438,34 @@ function ResultsView({ notebook, answers, checked }: { notebook: Notebook; answe
   const grade = pct >= 90 ? 5 : pct >= 70 ? 4 : pct >= 50 ? 3 : 2;
   const gradeColors: Record<number, string> = { 5: "text-green-600", 4: "text-blue-600", 3: "text-yellow-600", 2: "text-red-600" };
 
+  const handleSave = async () => {
+    if (saved || saving) return;
+    setSaving(true);
+    try {
+      await apiSaveResult({
+        notebook_id: notebook.id,
+        student_name: studentName,
+        student_class: studentClass,
+        answers,
+        checked,
+        earned_points: earnedPoints,
+        total_points: totalPoints,
+        grade,
+      });
+      setSaved(true);
+      onSaved?.();
+    } catch {
+      // silent
+    }
+    setSaving(false);
+  };
+
+  // Автосохранение при первом показе результатов
+  useEffect(() => {
+    if (studentName && !saved) { handleSave(); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="space-y-5">
       <div className="bg-white rounded-3xl border border-border p-8 text-center">
@@ -436,6 +475,15 @@ function ResultsView({ notebook, answers, checked }: { notebook: Notebook; answe
         <div className="h-3 bg-muted rounded-full mt-4 overflow-hidden">
           <div className="h-full rounded-full bg-primary transition-all duration-700" style={{ width: `${pct}%` }} />
         </div>
+        {studentName && (
+          <p className="text-xs text-muted-foreground mt-3">
+            {saved ? (
+              <span className="inline-flex items-center gap-1 text-green-600"><Icon name="CheckCircle2" size={12} /> Результат сохранён</span>
+            ) : saving ? (
+              <span className="inline-flex items-center gap-1"><Icon name="Loader2" size={12} className="animate-spin" /> Сохраняю...</span>
+            ) : null}
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-3 gap-3">
         <div className="bg-green-50 rounded-2xl p-4 text-center border border-green-200">
@@ -455,15 +503,65 @@ function ResultsView({ notebook, answers, checked }: { notebook: Notebook; answe
   );
 }
 
+// ─── Start Screen (ввод имени ученика) ───────────────────────────────────────
+
+function StartScreen({ notebook, onStart }: { notebook: Notebook; onStart: (name: string, cls: string) => void }) {
+  const { user } = useAuth();
+  const [name, setName] = useState(user?.name || "");
+  const [cls,  setCls]  = useState("");
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="rounded-3xl p-8 text-white text-center mb-6 shadow-lg" style={{ background: `linear-gradient(135deg, ${notebook.cover.color}dd, ${notebook.cover.color})` }}>
+          <p className="text-white/70 text-xs uppercase tracking-widest mb-2">Электронная тетрадь</p>
+          <h1 className="font-heading font-extrabold text-3xl mb-1">{notebook.cover.subject}</h1>
+          <p className="font-heading font-bold text-lg mb-3">{notebook.cover.grade} класс</p>
+          <div className="bg-white/20 backdrop-blur rounded-xl px-4 py-2 inline-block">
+            <p className="text-sm font-semibold">{notebook.cover.topic}</p>
+          </div>
+        </div>
+        <div className="bg-white rounded-3xl border border-border p-6 shadow-sm">
+          <h2 className="font-heading font-bold text-lg mb-4 text-center">Представься, пожалуйста</h2>
+          <div className="space-y-4 mb-5">
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Имя и фамилия</label>
+              <input value={name} onChange={(e) => setName(e.target.value)}
+                placeholder="Иван Иванов"
+                onKeyDown={(e) => e.key === "Enter" && name.trim() && onStart(name.trim(), cls.trim())}
+                className="w-full border-2 border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors" />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1.5">Класс <span className="text-muted-foreground font-normal">(необязательно)</span></label>
+              <input value={cls} onChange={(e) => setCls(e.target.value)}
+                placeholder="9А"
+                onKeyDown={(e) => e.key === "Enter" && name.trim() && onStart(name.trim(), cls.trim())}
+                className="w-full border-2 border-border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary transition-colors" />
+            </div>
+          </div>
+          <button onClick={() => onStart(name.trim(), cls.trim())} disabled={!name.trim()}
+            className="w-full py-3 bg-primary text-white rounded-2xl font-semibold text-sm hover:bg-primary/90 disabled:opacity-40 transition-colors flex items-center justify-center gap-2">
+            <Icon name="Play" size={16} /> Начать тетрадь
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main StudentView ─────────────────────────────────────────────────────────
 
 const QUIZ_TYPES: NotebookBlock["type"][] = ["quiz-radio", "quiz-multi", "quiz-match", "quiz-text"];
 
 export default function StudentView({ notebook, onBack }: Props) {
+  const { user } = useAuth();
+  const [started, setStarted] = useState(false);
+  const [studentName, setStudentName] = useState("");
+  const [studentClass, setStudentClass] = useState("");
   const [activeSectionId, setActiveSectionId] = useState<SectionId>("cover");
   const [answers,  setAnswers]  = useState<StudentAnswers>({});
   const [checked,  setChecked]  = useState<Record<string, boolean>>({});
-  const [taskNav,  setTaskNav]  = useState(false); // режим навигации по заданиям
+  const [taskNav,  setTaskNav]  = useState(false);
   const [taskIdx,  setTaskIdx]  = useState(0);
   const [exportMenu, setExportMenu] = useState(false);
 
@@ -532,6 +630,11 @@ export default function StudentView({ notebook, onBack }: Props) {
     ? notebook.sections.flatMap((s) => s.blocks).find((b) => b.id === currentTask.blockId)
     : null;
 
+  // Показываем стартовый экран
+  if (!started) {
+    return <StartScreen notebook={notebook} onStart={(n, c) => { setStudentName(n || user?.name || ""); setStudentClass(c); setStarted(true); }} />;
+  }
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Sidebar */}
@@ -568,6 +671,11 @@ export default function StudentView({ notebook, onBack }: Props) {
             <p className="font-heading font-extrabold text-xs">{notebook.cover.subject}</p>
             <p className="text-[10px] opacity-80 leading-snug">{notebook.cover.grade} кл. · {notebook.cover.topic}</p>
           </div>
+          {studentName && (
+            <p className="text-[11px] text-muted-foreground text-center mt-2 font-medium truncate">
+              👤 {studentName}{studentClass ? ` · ${studentClass}` : ""}
+            </p>
+          )}
         </div>
 
         {/* Mode toggle */}
@@ -737,7 +845,7 @@ export default function StudentView({ notebook, onBack }: Props) {
                   </div>
                 )}
                 {activeSectionId === "results" && (
-                  <ResultsView notebook={notebook} answers={answers} checked={checked} />
+                  <ResultsView notebook={notebook} answers={answers} checked={checked} studentName={studentName} studentClass={studentClass} />
                 )}
                 {activeSectionId !== "cover" && activeSectionId !== "contents" && activeSectionId !== "results" &&
                   activeSection.blocks.map((block) => (
